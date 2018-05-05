@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/weAutomateEverything/easytraceCache"
+	"github.com/CardFrontendDevopsTeam/easytrace/easytraceCache"
 	"github.com/weAutomateEverything/go2hal/alert"
 	"github.com/weAutomateEverything/go2hal/database"
 
