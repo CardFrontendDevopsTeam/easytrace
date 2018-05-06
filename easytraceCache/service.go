@@ -139,28 +139,10 @@ func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCo
 			log.Println(err)
 			return
 		}
-		/*var a [2]string
-		a[0] = "dsbggena45v"
-		a[1] = "dsbggena44v"
-		for i := 0; i < 1; i++ {
-			response, errresp := http.Get("http://" + a[i] + ".standardbank.co.za:8080/rest/load/branch")
-			if errresp != nil {
-				s.alertService.SendError(context.TODO(), errresp)
-			}
-			responseData, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				s.alertService.SendError(context.TODO(), err)
-			}
-			s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+a[i])
-			continue
-		}*/
-		var nodes [2]string
-		nodes[0] = "dsbggena45v"
-		nodes[1] = "dsbggena44v"
-		//nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
+		nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
 		res := make([]string, len(nodes))
 		for i, x := range nodes {
-			res[i] = x
+			res[i] = x.Name
 		}
 
 		s.alertService.SendAlertNodes(context.TODO(), res)
