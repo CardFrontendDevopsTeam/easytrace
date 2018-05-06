@@ -47,21 +47,7 @@ func main() {
 			Name:      "request_latency_microseconds",
 			Help:      "Total duration of requests in microseconds.",
 		}, fieldKeys), chefService)
-	cacheService := easytraceCache.NewService(remoteTelegramService, alertService,chefService,chefStore,telegramStore)
-	cacheService = easytraceCache.NewLoggingService(log.With(logger, "component", "easytraceCache"), cacheService)
-	cacheService = easytraceCache.NewInstrumentService(kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
-		Namespace: "api",
-		Subsystem: "easytraceCache",
-		Name:      "request_count",
-		Help:      "Number of requests received.",
-	}, fieldKeys),
-		kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
-			Namespace: "api",
-			Subsystem: "easytraceCache",
-			Name:      "request_latency_microseconds",
-			Help:      "Total duration of requests in microseconds.",
-		}, fieldKeys), cacheService)
-
+	easytraceCache.NewService(remoteTelegramService, alertService,chefService,chefStore,telegramStore)
 	http.Handle("/metrics", promhttp.Handler())
 
 	errs := make(chan error, 2)
