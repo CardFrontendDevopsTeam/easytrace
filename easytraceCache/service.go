@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"net/http"
 	"io/ioutil"
+	"os"
 )
 
 type Service interface {
@@ -38,15 +39,12 @@ func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.S
 
 	}()
 	go func() {
-		s.registerRemoteStream3()
+		s.RemoteNodeReply()
 
 	}()
 	return s
 }
 
-func (s *service) reloadCache() (string) {
-	return "hello"
-}
 func (s *service) registerRemoteStream() {
 	for {
 		request := remoteTelegramCommands.RemoteCommandRequest{Description: "Clear EasytraceCache", Name: "ReloadCache"}
@@ -84,14 +82,14 @@ func (s *service) RemoteEnvironmentReply() {
 		time.Sleep(30 * time.Second)
 	}
 }
-func (s *service) registerRemoteStream3() {
+func (s *service) RemoteNodeReply() {
 	for {
 		request := remoteTelegramCommands.Request{Nextstate: "EXECUTE", State: "SEARCH_CHEF_NODE"}
 		stream3, err := s.client.RegisterCommandLet(context.Background(), &request)
 		if err != nil {
 			log.Println(err)
 		} else {
-			s.monitorForStreamResponse3(stream3)
+			s.monitorNodeReply(stream3)
 		}
 		time.Sleep(30 * time.Second)
 	}
@@ -156,35 +154,46 @@ func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCo
 			s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+a[i])
 			continue
 		}*/
-		nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
+		var nodes [2]string
+		nodes[0] = "dsbggena45v"
+		nodes[1] = "dsbggena44v"
+		//nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
 		res := make([]string, len(nodes))
 		for i, x := range nodes {
-			res[i] = x.Name
-			response, errresp := http.Get("http://" + x.Name + ".standardbank.co.za:8080/rest/load/branch")
-			if errresp != nil {
-				s.alertService.SendError(context.TODO(), errresp)
-			}
-			responseData, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				s.alertService.SendError(context.TODO(), err)
-			}
-			s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+x.Name)
-			continue
+			res[i] = x
 		}
 
-		//s.alertService.SendAlertNodes(context.TODO(), res)
+		s.alertService.SendAlertNodes(context.TODO(), res)
 	}
 }
-func (s *service) monitorForStreamResponse3(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
+func (s *service) monitorNodeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		log.Println(in.Message)
-
-		log.Println("execute reload cache")
-
+		log.Println(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
+		response, errresp := http.Get(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
+		if errresp != nil {
+			s.alertService.SendError(context.TODO(), errresp)
+		}
+		responseData, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			s.alertService.SendError(context.TODO(), err)
+		}
+		s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+in.Message)
 	}
+}
+func getDomain() string {
+	return os.Getenv("DOMAIN")
+}
+func getPort() string {
+	return os.Getenv("PORT")
+}
+func getRestPath() string {
+	return os.Getenv("REST_PATH")
+}
+func getProtocol() string {
+	return os.Getenv("PROTOCOL")
 }
