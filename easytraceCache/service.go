@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"net/http"
 	"io/ioutil"
+	"os"
 )
 
 type Service interface {
-	reloadCache() (string)
 }
 
 type service struct {
@@ -31,23 +31,20 @@ func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.S
 		s.registerRemoteStream()
 	}()
 	go func() {
-		s.registerRemoteStream1()
-		//s.registerCommandLetRemoteStream("SEARCH_CHEF", "SEARCH_CHEF_ENVIRONMENT")
+		s.RemoteRecipeReply()
+
 	}()
 	go func() {
-		s.registerRemoteStream2()
-		//s.registerCommandLetRemoteStream("SEARCH_CHEF_ENVIRONMENT", "SEARCH_CHEF_NODE")
+		s.RemoteEnvironmentReply()
+
 	}()
 	go func() {
-		s.registerRemoteStream3()
-		//s.registerCommandLetRemoteStream("SEARCH_CHEF_NODE", "EXECUTE")
+		s.RemoteNodeReply()
+
 	}()
 	return s
 }
 
-func (s *service) reloadCache() (string) {
-	return "hello"
-}
 func (s *service) registerRemoteStream() {
 	for {
 		request := remoteTelegramCommands.RemoteCommandRequest{Description: "Clear EasytraceCache", Name: "ReloadCache"}
@@ -61,53 +58,38 @@ func (s *service) registerRemoteStream() {
 	}
 }
 
-func (s *service) registerRemoteStream1() {
+func (s *service) RemoteRecipeReply() {
 	for {
 		request := remoteTelegramCommands.Request{Nextstate: "SEARCH_CHEF_ENVIRONMENT", State: "SEARCH_CHEF"}
 		stream1, err := s.client.RegisterCommandLet(context.Background(), &request)
-		//stream1,err :=s.client.RegisterCommandLet(context.Background(),&request)
 		if err != nil {
 			log.Println(err)
 		} else {
-			s.monitorForStreamResponse1(stream1)
+			s.monitorRecipeReply(stream1)
 		}
 		time.Sleep(30 * time.Second)
 	}
 }
-
-/*func (s *service) registerCommandLetRemoteStream(state string, nextstate string) {
-	for {
-		request := remoteTelegramCommands.Request{Description: nextstate, Name: state}
-		commandLetStream, err := s.client.RegisterCommandLet(context.Background(), &request)
-		if err != nil {
-			log.Println(err)
-		} else {
-			s.monitorForStreamCommandLetResponse(commandLetStream, state)
-		}
-		time.Sleep(30 * time.Second)
-	}
-}*/
-
-func (s *service) registerRemoteStream2() {
+func (s *service) RemoteEnvironmentReply() {
 	for {
 		request := remoteTelegramCommands.Request{Nextstate: "SEARCH_CHEF_NODE", State: "SEARCH_CHEF_ENVIRONMENT"}
 		stream2, err := s.client.RegisterCommandLet(context.Background(), &request)
 		if err != nil {
 			log.Println(err)
 		} else {
-			s.monitorForStreamResponse2(stream2)
+			s.monitorEnvironmentReply(stream2)
 		}
 		time.Sleep(30 * time.Second)
 	}
 }
-func (s *service) registerRemoteStream3() {
+func (s *service) RemoteNodeReply() {
 	for {
 		request := remoteTelegramCommands.Request{Nextstate: "EXECUTE", State: "SEARCH_CHEF_NODE"}
 		stream3, err := s.client.RegisterCommandLet(context.Background(), &request)
 		if err != nil {
 			log.Println(err)
 		} else {
-			s.monitorForStreamResponse3(stream3)
+			s.monitorNodeReply(stream3)
 		}
 		time.Sleep(30 * time.Second)
 	}
@@ -126,7 +108,7 @@ func (s *service) monitorForStreamResponse(client remoteTelegramCommands.RemoteC
 	}
 }
 
-func (s *service) monitorForStreamResponse1(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
+func (s *service) monitorRecipeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
 		if err != nil {
@@ -143,15 +125,13 @@ func (s *service) monitorForStreamResponse1(client remoteTelegramCommands.Remote
 		buttons := make([]string, len(e))
 		for x, i := range e {
 			buttons[x] = i.FriendlyName
-
-			//s.alertService.SendAlert(context.TODO(), i.FriendlyName)
 		}
 
-		s.alertService.SendAlertEnvironment(context.TODO(),buttons)
+		s.alertService.SendAlertEnvironment(context.TODO(), buttons)
 
 	}
 }
-func (s *service) monitorForStreamResponse2(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
+func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
 		log.Println(in.Message)
@@ -159,7 +139,7 @@ func (s *service) monitorForStreamResponse2(client remoteTelegramCommands.Remote
 			log.Println(err)
 			return
 		}
-		var a [2]string
+		/*var a [2]string
 		a[0] = "dsbggena45v"
 		a[1] = "dsbggena44v"
 		for i := 0; i < 1; i++ {
@@ -173,59 +153,47 @@ func (s *service) monitorForStreamResponse2(client remoteTelegramCommands.Remote
 			}
 			s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+a[i])
 			continue
-		}
-		/*nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
+		}*/
+		var nodes [2]string
+		nodes[0] = "dsbggena45v"
+		nodes[1] = "dsbggena44v"
+		//nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
 		res := make([]string, len(nodes))
 		for i, x := range nodes {
-			res[i] = x.Name
-			response, errresp := http.Get("http://" + x.Name + ":8080/branch")
-			if errresp != nil {
-				s.alertService.SendError(context.TODO(), errresp)
-			}
-			responseData, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				s.alertService.SendError(context.TODO(), err)
-			}
-			s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+x.Name)
+			res[i] = x
 		}
-*/
-		//s.alertService.SendAlertNodes(context.TODO(), res)
+
+		s.alertService.SendAlertNodes(context.TODO(), res)
 	}
 }
-func (s *service) monitorForStreamResponse3(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
+func (s *service) monitorNodeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		log.Println(in.Message)
-
-		log.Println("execute reload cache")
-
-	}
-}
-
-/*
-func (s *service) monitorForStreamCommandLetResponse(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient, state string) {
-	for {
-		in, err := client.Recv()
+		log.Println(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
+		response, errresp := http.Get(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
+		if errresp != nil {
+			s.alertService.SendError(context.TODO(), errresp)
+		}
+		responseData, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			log.Println(err)
-			return
+			s.alertService.SendError(context.TODO(), err)
 		}
-		log.Println(in.From)
-		if in.From == "SEARCH_CHEF" {
-			s.alertService.SendAlertKeyboard(context.TODO(), "Please select the environment")
-		}
-		if in.From == "SEARCH_CHEF_ENVIRONMENT" {
-			s.alertService.SendAlertKeyboard(context.TODO(), "Please select the node")
-		}
-		if in.From == "SEARCH_CHEF_NODE" {
-			log.Println("execute reload cache")
-		}
-
-
+		s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+in.Message)
 	}
 }
-*/
+func getDomain() string {
+	return os.Getenv("DOMAIN")
+}
+func getPort() string {
+	return os.Getenv("PORT")
+}
+func getRestPath() string {
+	return os.Getenv("REST_PATH")
+}
+func getProtocol() string {
+	return os.Getenv("PROTOCOL")
+}
