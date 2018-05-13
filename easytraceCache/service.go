@@ -103,7 +103,7 @@ func (s *service) monitorForStreamResponse(client remoteTelegramCommands.RemoteC
 		}
 		i, err := strconv.Atoi(in.From)
 		s.telegramStore.SetState(i, "SEARCH_CHEF", nil)
-		s.alertService.SendAlertKeyboard(context.TODO(), "Please select the application")
+		s.chefService.SendKeyboardRecipe(context.TODO(), "Please select the application")
 
 	}
 }
@@ -116,18 +116,7 @@ func (s *service) monitorRecipeReply(client remoteTelegramCommands.RemoteCommand
 			return
 		}
 		log.Println(in.Message)
-		e, err := s.chefStore.GetChefEnvironments()
-		if err != nil {
-			s.alertService.SendError(context.TODO(), err)
-
-			return
-		}
-		buttons := make([]string, len(e))
-		for x, i := range e {
-			buttons[x] = i.FriendlyName
-		}
-
-		s.alertService.SendAlertEnvironment(context.TODO(), buttons)
+		s.chefService.SendKeyboardEnvironment(context.TODO(), "Please select the environment")
 
 	}
 }
@@ -139,13 +128,7 @@ func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCo
 			log.Println(err)
 			return
 		}
-		nodes := s.chefService.FindNodesFromFriendlyNames(in.Fields[0], in.Message)
-		res := make([]string, len(nodes))
-		for i, x := range nodes {
-			res[i] = x.Name
-		}
-
-		s.alertService.SendAlertNodes(context.TODO(), res)
+		s.chefService.SendKeyboardNodes(context.TODO(), in.Fields[0], in.Message, "Please select the node")
 	}
 }
 func (s *service) monitorNodeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
