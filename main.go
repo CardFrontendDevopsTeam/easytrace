@@ -5,8 +5,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/weAutomateEverything/go2hal/remoteTelegramCommands"
-	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
-	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,26 +25,13 @@ func main() {
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = level.NewFilter(logger, level.AllowAll())
 	logger = log.With(logger, "ts", log.DefaultTimestamp)
-	fieldKeys := []string{"method"}
 	db := database.NewConnection()
 	chefStore := chef.NewMongoStore(db)
 	telegramStore := telegram.NewMongoStore(db)
 	remoteTelegramService := remoteTelegramCommands.NewRemoteCommandClientService()
 	alertService := alert.NewKubernetesAlertProxy("")
-	chefService := chef.NewService(alertService, chefStore)
-	chefService = chef.NewLoggingService(log.With(logger, "component", "chef"), chefService)
-	chefService = chef.NewInstrumentService(kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
-		Namespace: "api",
-		Subsystem: "chef",
-		Name:      "request_count",
-		Help:      "Number of requests received.",
-	}, fieldKeys),
-		kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
-			Namespace: "api",
-			Subsystem: "chef",
-			Name:      "request_latency_microseconds",
-			Help:      "Total duration of requests in microseconds.",
-		}, fieldKeys), chefService)
+	chefService := chef.NewKubernetesChefProxy("")
+
 	easytraceCache.NewService(remoteTelegramService, alertService,chefService,chefStore,telegramStore)
 	http.Handle("/metrics", promhttp.Handler())
 
