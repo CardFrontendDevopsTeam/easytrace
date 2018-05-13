@@ -26,13 +26,12 @@ func main() {
 	logger = level.NewFilter(logger, level.AllowAll())
 	logger = log.With(logger, "ts", log.DefaultTimestamp)
 	db := database.NewConnection()
-	chefStore := chef.NewMongoStore(db)
 	telegramStore := telegram.NewMongoStore(db)
 	remoteTelegramService := remoteTelegramCommands.NewRemoteCommandClientService()
 	alertService := alert.NewKubernetesAlertProxy("")
 	chefService := chef.NewKubernetesChefProxy("")
 
-	easytraceCache.NewService(remoteTelegramService, alertService,chefService,chefStore,telegramStore)
+	easytraceCache.NewService(remoteTelegramService, alertService,chefService,telegramStore)
 	http.Handle("/metrics", promhttp.Handler())
 
 	errs := make(chan error, 2)
