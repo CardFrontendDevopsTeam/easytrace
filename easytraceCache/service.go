@@ -21,12 +21,11 @@ type service struct {
 	client        remoteTelegramCommands.RemoteCommandClient
 	alertService  alert.Service
 	chefService   chef.Service
-	chefStore     chef.Store
 	telegramStore telegram.Store
 }
 
-func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.Service, chefService chef.Service, chefStore chef.Store, telegramStore telegram.Store) Service {
-	s := &service{client, alert, chefService, chefStore, telegramStore}
+func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.Service, chefService chef.Service,  telegramStore telegram.Store) Service {
+	s := &service{client, alert, chefService,  telegramStore}
 	go func() {
 		s.registerRemoteStream()
 	}()
