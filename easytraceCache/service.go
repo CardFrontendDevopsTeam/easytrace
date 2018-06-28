@@ -5,27 +5,30 @@ import (
 	"time"
 	"golang.org/x/net/context"
 	"log"
-	"github.com/weAutomateEverything/go2hal/alert"
-	"github.com/weAutomateEverything/go2hal/chef"
-	"github.com/weAutomateEverything/go2hal/telegram"
 	"strconv"
-	"net/http"
-	"io/ioutil"
 	"os"
+	"encoding/json"
+	"net/http"
+	"bytes"
+	"io/ioutil"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type Service interface {
 }
 
 type service struct {
-	client        remoteTelegramCommands.RemoteCommandClient
-	alertService  alert.Service
-	chefService   chef.Service
-	telegramStore telegram.Store
+	client remoteTelegramCommands.RemoteCommandClient
+}
+type Recipe struct {
+	ID           bson.ObjectId `bson:"_id,omitempty"`
+	Recipe       string
+	FriendlyName string
+	ChatID       uint32
 }
 
-func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.Service, chefService chef.Service,  telegramStore telegram.Store) Service {
-	s := &service{client, alert, chefService,  telegramStore}
+func NewService(client remoteTelegramCommands.RemoteCommandClient) Service {
+	s := &service{client}
 	go func() {
 		s.registerRemoteStream()
 	}()
@@ -47,11 +50,11 @@ func NewService(client remoteTelegramCommands.RemoteCommandClient, alert alert.S
 func (s *service) registerRemoteStream() {
 	for {
 		request := remoteTelegramCommands.RemoteCommandRequest{Description: "Clear EasytraceCache", Name: "ReloadCache"}
-		stream, err := s.client.RegisterCommand(context.Background(), &request)
+		regcommandstream, err := s.client.RegisterCommand(context.Background(), &request)
 		if err != nil {
 			log.Println(err)
 		} else {
-			s.monitorForStreamResponse(stream)
+			s.monitorForStreamResponse(regcommandstream)
 		}
 		time.Sleep(30 * time.Second)
 	}
@@ -81,6 +84,7 @@ func (s *service) RemoteEnvironmentReply() {
 		time.Sleep(30 * time.Second)
 	}
 }
+
 func (s *service) RemoteNodeReply() {
 	for {
 		request := remoteTelegramCommands.Request{Nextstate: "EXECUTE", State: "SEARCH_CHEF_NODE"}
@@ -100,10 +104,17 @@ func (s *service) monitorForStreamResponse(client remoteTelegramCommands.RemoteC
 			log.Println(err)
 			return
 		}
-		i, err := strconv.Atoi(in.From)
-		s.telegramStore.SetState(i, "SEARCH_CHEF", nil)
-		s.chefService.SendKeyboardRecipe(context.TODO(), "Please select the application")
-
+		err = s.SetState(in.From, in.Chat, "SEARCH_CHEF")
+		if err != nil {
+			log.Println("The HTTP request failed with error %s\n", err)
+		} else {
+			res,err :=s.GetRecipes(in.Chat)
+			if err!=nil{
+				log.Println("The HTTP request failed with error %s\n", err)
+			}
+			chatid, _ := strconv.ParseInt(in.Chat, 10, 64)
+			s.SendKeyboard(res,"Please select the application",chatid)
+		}
 	}
 }
 
@@ -114,22 +125,35 @@ func (s *service) monitorRecipeReply(client remoteTelegramCommands.RemoteCommand
 			log.Println(err)
 			return
 		}
-		log.Println(in.Message)
-		s.chefService.SendKeyboardEnvironment(context.TODO(), "Please select the environment")
+		res,err :=s.GetEnvironments(in.Chat)
+		if err != nil {
+			log.Println("The HTTP request failed with error %s\n", err)
+		}
 
-	}
+		i, _ := strconv.ParseInt(in.Chat, 10, 64)
+		s.SendKeyboard(res,"Please select the environment",i)
+
+		}
 }
 func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
 		log.Println(in.Message)
+		log.Println(in.Fields[0])
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		s.chefService.SendKeyboardNodes(context.TODO(), in.Fields[0], in.Message, "Please select the node")
+		i, _ := strconv.ParseUint(in.Chat, 10, 64)
+		i1, _ := strconv.ParseInt(in.Chat, 10, 64)
+		res,err :=s.GetNodes(in.Fields[0],in.Message,i)
+		if err!=nil{
+			log.Println("The HTTP request failed with error %s\n", err)
+		}
+		s.SendKeyboard(res,"Please select the environment",i1)
 	}
 }
+
 func (s *service) monitorNodeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
@@ -137,17 +161,76 @@ func (s *service) monitorNodeReply(client remoteTelegramCommands.RemoteCommand_R
 			log.Println(err)
 			return
 		}
-		log.Println(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
 		response, errresp := http.Get(getProtocol() + "://" + in.Message + "." + getDomain() + ":" + getPort() + getRestPath())
 		if errresp != nil {
-			s.alertService.SendError(context.TODO(), errresp)
+			log.Println(errresp)
 		}
 		responseData, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			s.alertService.SendError(context.TODO(), err)
+			log.Println("The HTTP request failed with error %s\n", err)
 		}
-		s.alertService.SendAlert(context.TODO(), string(responseData)+" from "+in.Message)
+		log.Println(string(responseData) + " from " + in.Message)
+
 	}
+}
+func (s *service) SetState(user string, chat string, state string) error {
+	stateReq := setStateRequest{User: user, Chat: chat, State: "SEARCH_CHEF"}
+	jsonValue, _ := json.Marshal(stateReq)
+	request, _ := http.NewRequest("POST", "http://localhost:8000/api/telegram/state", bytes.NewBuffer(jsonValue))
+	request.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	_, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (s *service) GetRecipes(chat string) ([]string,error) {
+	response, err := http.Get("http://localhost:8000/api/chef/recipes/group/" + chat)
+	if err != nil {
+		return nil,err
+	}
+	responseData, err := ioutil.ReadAll(response.Body)
+	res, err := getRecipes(responseData)
+	if err!=nil {
+		return nil,err
+	}
+	return res,nil
+}
+func (s *service) GetEnvironments(chat string) ([]string,error) {
+	response, err := http.Get("http://localhost:8000/api/chef/environments/group/" + chat)
+	if err != nil {
+		return nil,err
+	}
+	responseData, err := ioutil.ReadAll(response.Body)
+	res, err := getEnvironments(responseData)
+	if err!=nil {
+		return nil,err
+	}
+	return res,nil
+}
+func (s *service) GetNodes(recipe string,environment string,chat uint64) ([]string,error) {
+	jsonData2 := chefNodeRequest{Recipe: recipe, Environment: environment, Chat: uint32(chat)}
+	jsonValue2, _ := json.Marshal(jsonData2)
+	request2, _ := http.NewRequest("POST", "http://localhost:8000/api/chef/nodes", bytes.NewBuffer(jsonValue2))
+	request2.Header.Set("Content-Type", "application/json")
+	client2 := &http.Client{}
+	response2, err := client2.Do(request2)
+	if err!=nil{
+		return nil,err
+	}
+	bodyText, err := ioutil.ReadAll(response2.Body)
+	res, err := getNodes(bodyText)
+	return res,nil
+}
+func (s *service) SendKeyboard(options []string,message string,groupid int64) error {
+	jsonData1 := sendKeyBoardRequest{Options: options, Message: "Please select the application", GroupId: groupid}
+	jsonValue1, _ := json.Marshal(jsonData1)
+	request1, _ := http.NewRequest("POST", "http://localhost:8000/api/telegram/keyboard", bytes.NewBuffer(jsonValue1))
+	request1.Header.Set("Content-Type", "application/json")
+	client1 := &http.Client{}
+	_, err := client1.Do(request1)
+	return err
 }
 func getDomain() string {
 	return os.Getenv("DOMAIN")
@@ -160,4 +243,57 @@ func getRestPath() string {
 }
 func getProtocol() string {
 	return os.Getenv("PROTOCOL")
+}
+
+type recipeResponse struct {
+	Recipes []string
+}
+type environmentResponse struct {
+	Environments []string
+}
+type nodeResponse struct {
+	Nodes []string
+}
+type sendKeyBoardRequest struct {
+	Options []string
+	Message string
+	GroupId int64
+}
+type chefNodeRequest struct {
+	Recipe      string
+	Environment string
+	Chat        uint32
+}
+type setStateRequest struct {
+	User  string
+	Chat  string
+	State string
+}
+
+func getRecipes(body []byte) ([]string, error) {
+	var s = new(recipeResponse)
+	err := json.Unmarshal(body, &s)
+	if err != nil {
+		log.Println(err)
+	}
+
+	return s.Recipes, err
+}
+func getEnvironments(body []byte) ([]string, error) {
+	var s = new(environmentResponse)
+	err := json.Unmarshal(body, &s)
+	if err != nil {
+		log.Println(err)
+	}
+
+	return s.Environments, err
+}
+func getNodes(body []byte) ([]string, error) {
+	var s = new(nodeResponse)
+	err := json.Unmarshal(body, &s)
+	if err != nil {
+		log.Println(err)
+	}
+
+	return s.Nodes, err
 }
