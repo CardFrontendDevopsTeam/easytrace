@@ -1,0 +1,21 @@
+language: go
+go:
+- master
+
+env:
+  global:
+   - GOOS="linux"
+   - GOARCH="amd64"
+addons:
+  artifacts: true
+
+sudo: false
+
+services:
+ - docker
+
+script:
+ - go build
+
+after_success:
+  - bin/docker_push.sh
