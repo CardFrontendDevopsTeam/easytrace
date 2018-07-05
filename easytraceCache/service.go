@@ -5,7 +5,6 @@ import (
 	"time"
 	"golang.org/x/net/context"
 	"log"
-	"strconv"
 	"os"
 	"encoding/json"
 	"net/http"
@@ -49,7 +48,7 @@ func NewService(client remoteTelegramCommands.RemoteCommandClient) Service {
 
 func (s *service) registerRemoteStream() {
 	for {
-		request := remoteTelegramCommands.RemoteCommandRequest{Description: "Clear EasytraceCache", Name: "ReloadCache"}
+		request := remoteTelegramCommands.RemoteCommandRequest{Description: "Clear EasytraceCache", Name: "ReloadCache",Group:418124524}
 		regcommandstream, err := s.client.RegisterCommand(context.Background(), &request)
 		if err != nil {
 			log.Println(err)
@@ -108,11 +107,11 @@ func (s *service) monitorForStreamResponse(client remoteTelegramCommands.RemoteC
 		if err != nil {
 			log.Println("The HTTP request failed with error %s\n", err)
 		} else {
-			res,err :=s.GetRecipes(in.Chat)
+			res,err :=s.GetRecipes("418124524")
 			if err!=nil{
 				log.Println("The HTTP request failed with error %s\n", err)
 			}
-			chatid, _ := strconv.ParseInt(in.Chat, 10, 64)
+			chatid, _ := s.GetRoom("418124524")
 			s.SendKeyboard(res,"Please select the application",chatid)
 		}
 	}
@@ -120,37 +119,35 @@ func (s *service) monitorForStreamResponse(client remoteTelegramCommands.RemoteC
 
 func (s *service) monitorRecipeReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
-		in, err := client.Recv()
+		_, err := client.Recv()
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		res,err :=s.GetEnvironments(in.Chat)
+		res,err :=s.GetEnvironments("418124524")
 		if err != nil {
 			log.Println("The HTTP request failed with error %s\n", err)
 		}
 
-		i, _ := strconv.ParseInt(in.Chat, 10, 64)
-		s.SendKeyboard(res,"Please select the environment",i)
+		chatid, _ := s.GetRoom("418124524")
+		s.SendKeyboard(res,"Please select the environment",chatid)
 
 		}
 }
 func (s *service) monitorEnvironmentReply(client remoteTelegramCommands.RemoteCommand_RegisterCommandLetClient) {
 	for {
 		in, err := client.Recv()
-		log.Println(in.Message)
-		log.Println(in.Fields[0])
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		i, _ := strconv.ParseUint(in.Chat, 10, 64)
-		i1, _ := strconv.ParseInt(in.Chat, 10, 64)
-		res,err :=s.GetNodes(in.Fields[0],in.Message,i)
+
+		chatid, _ := s.GetRoom("418124524")
+		res,err :=s.GetNodes(in.Fields[0],in.Message,418124524)
 		if err!=nil{
 			log.Println("The HTTP request failed with error %s\n", err)
 		}
-		s.SendKeyboard(res,"Please select the environment",i1)
+		s.SendKeyboard(res,"Please select the node",chatid)
 	}
 }
 
@@ -194,6 +191,19 @@ func (s *service) GetRecipes(chat string) ([]string,error) {
 	res, err := getRecipes(responseData)
 	if err!=nil {
 		return nil,err
+	}
+	return res,nil
+}
+func (s *service) GetRoom(chat string) (int64,error) {
+	response, err := http.Get("http://localhost:8000/api/telegram/room/" + chat)
+	if err != nil {
+		return 0,err
+	}
+	responseData, err := ioutil.ReadAll(response.Body)
+	log.Println(string(responseData))
+	res,err:=getRoom(responseData)
+	if err!=nil {
+		return 0,err
 	}
 	return res,nil
 }
@@ -296,4 +306,16 @@ func getNodes(body []byte) ([]string, error) {
 	}
 
 	return s.Nodes, err
+}
+func getRoom(body []byte) (int64, error) {
+	var s = new(roomResponse)
+	err := json.Unmarshal(body, &s)
+	if err != nil {
+		log.Println(err)
+	}
+    log.Println(string(body))
+	return s.Id, err
+}
+type roomResponse struct {
+	Id int64
 }
